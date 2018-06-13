@@ -10,7 +10,7 @@ public interface MensajesJSON {
         LOGIN, REGISTRO, CERRAR_SESION,
         VER_CONECTADOS, ENVIAR_MENSAJE,
         RECIBIR_MENSAJE, VER_CANCIONES, VER_CANCIONES_USER, DESCARGAR_CANCION,
-        SUBIR_CANCION, PISTA_ACTUAL, NUEVO_USUARIO
+        SUBIR_CANCION, PISTA_ACTUAL, NUEVO_USUARIO, SALIR
     };
 
     final String TYPE = "type";
@@ -19,6 +19,7 @@ public interface MensajesJSON {
     final String ANSWER = "answer";
 
     final String USER = "user";
+    final String DESTINATARIO = "destinatario";
     final String PASS = "nPass";
     final String IP = "ip";
 

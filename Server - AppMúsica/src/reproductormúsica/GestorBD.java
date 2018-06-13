@@ -1,8 +1,3 @@
-/*
- * To change this license header, choose License Headers in Project Properties.
- * To change this template file, choose Tools | Templates
- * and open the template in the editor.
- */
 package reproductormúsica;
 
 import java.sql.Connection;
@@ -16,33 +11,43 @@ import java.util.ArrayList;
 /**
  *
  * @author Iulian
+ *
+ * @version 1.0 Esqueleto procedimientos
+ *
+ * @version 2.0 Desarrollo de la querys de los métodos
+ *
+ * @version 3.0 Añadida query y método saber canción actual
+ *
  */
 public class GestorBD {
 
     private static GestorBD instancia = null;
     private final int MAX_RESULT_FOR_QUERY = 50;
+    private Connection conexionDB;
 
     /* Credenciales para conectar la BD */
     private final String ADMINDB = "u681177";
     private final String PASS = "u681177";
     private static final String NOMBRE_BD = "u681177";
     private static final String DIRECCION_BD = "web-ter.unizar.es:3306";
-    private Connection conexionDB;
+
     private final String URL_DB = "jdbc:mysql://" + DIRECCION_BD + "/" + NOMBRE_BD;
 
     private final String queryGetUsers = "SELECT * FROM `usuario` WHERE `estado`='conectado' AND `nombreUsuario`!='%s' ORDER BY RAND() LIMIT %d";
-    private final String queryRegiter = "INSERT INTO `usuario`(`nombreUsuario`, `Password`, `estado`)"
-            + " VALUES ('%s','%s', '%s');";
+
     private final String queryCheckPass = "SELECT * FROM `usuario` WHERE `nombreUsuario`='%s' AND `Password`='%s'";
     private final String queryStatus = "SELECT * FROM `usuario` WHERE `nombreUsuario`='%s' AND `estado`='desconectado'";
     private final String queryUpdateStatus = "UPDATE `usuario` SET `estado`='%s' WHERE `nombreUsuario` = '%s'";
     private final String queryCanciones = "SELECT * FROM `cancion`";
     private final String queryCancionesUsuario = "SELECT `nombreCancion` FROM `usuario-cancion` WHERE `nombreUsuario` = '%s' ORDER BY RAND() LIMIT %d";
     private final String queryUsers = "SELECT * FROM `usuario` WHERE `estado`!='desconectado'";
+    private final String queryPistaActual = "SELECT `pistaActual` FROM `usuario`";
     private final String querySubirCancion = "INSERT INTO `cancion`(`nombreCancion`, `ruta`)"
             + " VALUES ('%s','%s');";
     private final String queryDescargarCancion = "INSERT INTO `usuario-cancion`(`nombreUsuario`, `nombreCancion`)"
             + " VALUES ('%s','%s');";
+    private final String queryRegiter = "INSERT INTO `usuario`(`nombreUsuario`, `Password`, `estado`)"
+            + " VALUES ('%s','%s', '%s');";
 
     public enum EstadoUsuario {
         conectado, desconectado
@@ -73,7 +78,7 @@ public class GestorBD {
     }
 
     /**
-     * 
+     * Desconecta a todos los usuarios conectados cuando se reinicia el servidor
      */
     private void conexionDesconectar() throws SQLException {
         ArrayList lista = new ArrayList();
@@ -89,6 +94,13 @@ public class GestorBD {
             s.executeUpdate(String.format(queryUpdateStatus, EstadoUsuario.desconectado, (String) lista.get(0)));
             lista.remove(0);
         }
+    }
+
+    public void desconectarUsuario(String nombreUsuario) throws SQLException {
+
+        Statement s = this.conexionDB.createStatement();
+
+        s.executeUpdate(String.format(queryUpdateStatus, EstadoUsuario.desconectado, nombreUsuario));
     }
 
     public ResultSet obtenerUsuarios(String usuario) {
@@ -148,6 +160,26 @@ public class GestorBD {
 
         } finally {
             return respuesta;
+        }
+    }
+
+    public String saberPistaActual(String nombreUsuario) {
+        Statement s;
+        ResultSet respuesta = null;
+
+        try {
+            s = conexionDB.createStatement();
+            respuesta = s.executeQuery(String.format(queryPistaActual, nombreUsuario));
+
+            if (!respuesta.next()) {
+                respuesta = null;
+            }
+        } catch (SQLException ex) {
+            respuesta = null;
+            ex.printStackTrace();
+
+        } finally {
+            return respuesta.toString();
         }
     }
 
@@ -274,5 +306,4 @@ public class GestorBD {
             return respuesta;
         }
     }
-
 }

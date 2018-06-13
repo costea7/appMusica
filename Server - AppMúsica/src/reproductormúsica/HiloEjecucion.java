@@ -1,10 +1,23 @@
-/*
- * To change this license header, choose License Headers in Project Properties.
- * To change this template file, choose Tools | Templates
- * and open the template in the editor.
- */
 package reproductormúsica;
 
+/**
+ *
+ * @author Iulian
+ *
+ * @version 1.0 Declaracion de metodos
+ *
+ * @version 2.0 Implementadas pimeras funcionalidades
+ * @version 2.1 Comunicación Cliente-Servidor-Cliente vía socket
+ * @version 2.2 Login y Registro usuario con JSON
+ * @version 2.3 Implementado método para obtener listado con los usuarios
+ *
+ * @version 3.0 Implementada parte subida-descarga canciones
+ * @version 3.1 Método descargaCancion, funcional
+ * @version 3.1 Método subirCancion, funcional
+ *
+ * @version 4.0 Chat y Cancion Actual
+ *
+ */
 import archivos.Clientes_Server.MensajeDameFichero;
 import java.io.BufferedReader;
 import java.io.DataInputStream;
@@ -12,7 +25,6 @@ import java.io.DataOutputStream;
 import java.io.IOException;
 
 import java.io.ObjectInputStream;
-import java.io.PrintWriter;
 import java.net.Socket;
 import java.sql.ResultSet;
 import java.sql.SQLException;
@@ -27,6 +39,7 @@ import archivos.Server_Cliente.MensajeTomaFichero;
 import archivos.Server_Cliente.hilorecibe;
 import archivos.Clientes_Server.hiloenvio;
 import java.io.ObjectOutputStream;
+import java.util.ArrayList;
 
 /**
  *
@@ -38,6 +51,9 @@ public class HiloEjecucion extends Thread implements Runnable {
     private final Servidor servidor;
     private DataInputStream in;
     private DataOutputStream out;
+    private ArrayList<String> listamensajes;
+
+    JSONObject mensaje = null;
 
     private String usuario;
 
@@ -45,6 +61,7 @@ public class HiloEjecucion extends Thread implements Runnable {
         socket = cliente;
         in = new DataInputStream(socket.getInputStream());
         out = new DataOutputStream(socket.getOutputStream());
+        listamensajes = new ArrayList<>();
         this.servidor = servidor;
     }
 
@@ -52,71 +69,79 @@ public class HiloEjecucion extends Thread implements Runnable {
     public void run() {
         JSONObject json;
         JSONParser parser = new JSONParser();
-        String cadena = "";
-        try {
-            while (!cadena.equals("Salir")) {
 
+        String cadena = "";
+
+        while (!cadena.equals("Salir")) {
+            try {
                 cadena = in.readUTF();
-                System.out.println(cadena);
+                //System.out.println("dale " + cadena);
                 json = (JSONObject) parser.parse(cadena);
-                this.gestionReproductor(json);
+                mensaje = gestionReproductor(json);
+            } catch (IOException ex) {
+                Logger.getLogger(HiloEjecucion.class.getName()).log(Level.SEVERE, null, ex);
+            } catch (ParseException ex) {
+                Logger.getLogger(HiloEjecucion.class.getName()).log(Level.SEVERE, null, ex);
+            } catch (ClassNotFoundException ex) {
+                Logger.getLogger(HiloEjecucion.class.getName()).log(Level.SEVERE, null, ex);
+            } catch (SQLException ex) {
+                Logger.getLogger(HiloEjecucion.class.getName()).log(Level.SEVERE, null, ex);
+            }
+            try {
+                out.writeUTF(mensaje.toString());
+                out.flush();
+            } catch (IOException e) {
+                System.out.println("hilo, error de escritura " + e.getMessage());
+            } catch (NullPointerException e) {
 
             }
-        } catch (IOException ex) {
-            Logger.getLogger(HiloEjecucion.class
-                    .getName()).log(Level.SEVERE, null, ex);
-
-        } catch (ParseException ex) {
-            Logger.getLogger(HiloEjecucion.class
-                    .getName()).log(Level.SEVERE, null, ex);
-
-        } catch (ClassNotFoundException ex) {
-            Logger.getLogger(HiloEjecucion.class
-                    .getName()).log(Level.SEVERE, null, ex);
-        } catch (SQLException ex) {
-            Logger.getLogger(HiloEjecucion.class.getName()).log(Level.SEVERE, null, ex);
         }
     }
 
-    public void gestionReproductor(JSONObject mensaje) throws IOException, ClassNotFoundException, SQLException {
+    public JSONObject gestionReproductor(JSONObject mensaje) throws IOException, ClassNotFoundException, SQLException, ParseException {
+        JSONObject resp = null;
         switch (MensajesJSON.type.valueOf((String) mensaje.get(MensajesJSON.TYPE))) {
             case LOGIN:
-                loginUsuario(mensaje);
+                resp = loginUsuario(mensaje);
                 break;
             case REGISTRO:
-                registrarUsuario(mensaje);
+                resp = registrarUsuario(mensaje);
                 break;
             case CERRAR_SESION:
                 cerrarSesion();
                 break;
             case VER_CONECTADOS:
-                verUsuarios();
+                resp = verUsuarios();
                 break;
             case ENVIAR_MENSAJE:
-                enviarMensajeChat(mensaje);
+                //enviarMensajeChat(mensaje);
                 break;
             case RECIBIR_MENSAJE:
-                recibirMensajeChat();
+                //recibirMensajeChat();
                 break;
             case VER_CANCIONES:
-                verListaCanciones();
+                resp = verListaCanciones();
                 break;
             case VER_CANCIONES_USER:
-                verCancionesUsuario(mensaje);
+                resp = verCancionesUsuario();
                 break;
             case DESCARGAR_CANCION:
-                descargarCancion(mensaje, socket);
+                resp = descargarCancion(mensaje, socket);
                 break;
             case SUBIR_CANCION:
-                subirCancion(mensaje, socket);
+                resp = subirCancion(mensaje, socket);
                 break;
             case PISTA_ACTUAL:
-                saberPistaActual(mensaje);
+                // resp = saberPistaActual(mensaje);
+                break;
+            case SALIR:
+                resp = salir(mensaje);
                 break;
         }
+        return resp;
     }
 
-    public void registrarUsuario(JSONObject mensaje) throws IOException {
+    public JSONObject registrarUsuario(JSONObject mensaje) throws IOException {
         JSONObject valores = (JSONObject) mensaje.get(MensajesJSON.VALUES);
 
         String usuario = (String) valores.get(MensajesJSON.USER);
@@ -126,14 +151,13 @@ public class HiloEjecucion extends Thread implements Runnable {
         boolean respuesta = servidor.getDB().registrarUsuario(usuario, pass);
 
         if (respuesta) {
-            enviarMsj(crearMsjNuevoUsuario(respuesta));
+            return crearMsjNuevoUsuario(respuesta);
         } else {
-            enviarMsj(crearMsjENuevoUsuario(respuesta));
-
+            return crearMsjENuevoUsuario(respuesta);
         }
     }
 
-    public void subirCancion(JSONObject mensaje, Socket cliente) throws IOException, ClassNotFoundException {
+    public JSONObject subirCancion(JSONObject mensaje, Socket cliente) throws IOException, ClassNotFoundException, SQLException {
 
         JSONObject valores = (JSONObject) mensaje.get(MensajesJSON.VALUES);
         String nombreCancion = (String) valores.get(MensajesJSON.NOM_CANCION);
@@ -141,25 +165,27 @@ public class HiloEjecucion extends Thread implements Runnable {
 
         boolean respuesta = servidor.getDB().subirCancion(nombreCancion, ruta);
 
-        if (respuesta) {
-            enviarMsj(crearMsjSubirCancion(respuesta));
-        } else {
-            enviarMsj(crearMsjESubirCancion(respuesta));
-
-        }
-
         ObjectInputStream ois = new ObjectInputStream(cliente.getInputStream());
         Object cancion = ois.readObject();
 
         if (cancion instanceof MensajeTomaFichero) {
 
             hilorecibe hr = new hilorecibe(((MensajeTomaFichero) cancion).nombreFichero, ois);
-            hr.start();
+            hr.run();
+
         }
 
+        HiloEjecucion hh = new HiloEjecucion(servidor, cliente);
+        hh.run();
+
+        if (respuesta) {
+            return (crearMsjSubirCancion(respuesta));
+        } else {
+            return (crearMsjESubirCancion(respuesta));
+        }
     }
 
-    private void descargarCancion(JSONObject mensaje, Socket cliente) throws IOException, IOException, ClassNotFoundException {
+    private JSONObject descargarCancion(JSONObject mensaje, Socket cliente) throws IOException, IOException, ClassNotFoundException {
 
         JSONObject valores = (JSONObject) mensaje.get(MensajesJSON.VALUES);
         String nombreUsuario = (String) valores.get(MensajesJSON.USER);
@@ -171,22 +197,22 @@ public class HiloEjecucion extends Thread implements Runnable {
         try {
             ois = new ObjectInputStream(cliente.getInputStream());
             Object cancion = ois.readObject();
-    
+
             hiloenvio hiloenv = new hiloenvio(((MensajeDameFichero) cancion).nombreFichero, new ObjectOutputStream(cliente.getOutputStream()));
-            hiloenv.start();
+            hiloenv.run();
         } catch (IOException | ClassNotFoundException ex) {
-          
+
         }
 
         if (respuesta) {
-            enviarMsj(crearMsjDescargarCancion(respuesta));
+            return (crearMsjDescargarCancion(respuesta));
         } else {
-            enviarMsj(crearMsjEDescargarCancion(respuesta));
+            return (crearMsjEDescargarCancion(respuesta));
         }
 
     }
 
-    public void loginUsuario(JSONObject mensaje) throws IOException {
+    public JSONObject loginUsuario(JSONObject mensaje) throws IOException {
         JSONObject valores = (JSONObject) mensaje.get(MensajesJSON.VALUES);
 
         String usuario = (String) valores.get(MensajesJSON.USER);
@@ -197,11 +223,12 @@ public class HiloEjecucion extends Thread implements Runnable {
 
         if (respuesta) {
 
-            enviarMsj(crearMsjLoginUsuario(respuesta));
+            return crearMsjLoginUsuario(respuesta);
         } else {
 
-            enviarMsj(crearMsjELoginUsuario(respuesta));
+            return crearMsjELoginUsuario(respuesta);
         }
+
     }
 
     private JSONObject crearMsjNuevoUsuario(boolean exito) {
@@ -222,17 +249,17 @@ public class HiloEjecucion extends Thread implements Runnable {
         return respuesta;
     }
 
-    public void verUsuarios() throws SQLException, IOException {
-        enviarMsj(crearMsjListUsuarios(servidor.getDB().obtenerUsuarios(usuario)));
+    public JSONObject verUsuarios() throws SQLException, IOException {
+        return crearMsjListUsuarios(servidor.getDB().obtenerUsuarios(usuario));
     }
 
-    private JSONObject crearMsjListUsuarios(ResultSet rs) throws SQLException {
+    private JSONObject crearMsjListUsuarios(ResultSet rs) throws SQLException, IOException {
         JSONObject respuesta = new JSONObject();
         JSONObject lista = new JSONObject();
 
-        //respuesta.put(MensajesJSON.TYPE, MensajesJSON.type.VER_CONECTADOS.toString());
+        respuesta.put(MensajesJSON.TYPE, MensajesJSON.type.VER_CONECTADOS.toString());
         lista.put(MensajesJSON.LIST, crearListaUsuarios(rs));
-        respuesta.put(MensajesJSON.VALUES, lista.values());
+        respuesta.put(MensajesJSON.VALUES, lista);
 
         return respuesta;
 
@@ -244,6 +271,8 @@ public class HiloEjecucion extends Thread implements Runnable {
             do {
                 JSONObject usuario = new JSONObject();
                 usuario.put(MensajesJSON.USER, rs.getString("nombreUsuario"));
+                //String a = actualizar();
+                //usuario.put(MensajesJSON.NOM_CANCION, a);
                 respuesta.add(usuario);
             } while (rs.next());
         }
@@ -251,12 +280,12 @@ public class HiloEjecucion extends Thread implements Runnable {
     }
 
     //escribir en la base de datos la cancion que está reproduciendo el usuario
-    public void saberPistaActual(JSONObject mensaje) {
+    public void saberPistaActual(JSONObject mensaje) throws SQLException, IOException {
 
         JSONObject valores = (JSONObject) mensaje.get(MensajesJSON.VALUES);
-        String pistaActual = (String) valores.get(MensajesJSON.RUTA_CANCION);
+        //nombreCancion = (String) valores.get(MensajesJSON.NOM_CANCION);
 
-        //servidor.getDB().pistaActual();
+        //enviarMsj(crearMsjPista(nombreCancion));
     }
 
     public void enviarMensajeChat(JSONObject mensaje) {
@@ -264,50 +293,39 @@ public class HiloEjecucion extends Thread implements Runnable {
 
         valores.put(MensajesJSON.USER, usuario);
         mensaje.put(MensajesJSON.VALUES, valores);
-
-        sendTo(mensaje);
+        mandarA(mensaje);
 
     }
 
-    private void sendTo(JSONObject mensaje) throws NullPointerException {
+    private void mandarA(JSONObject mensaje) throws NullPointerException {
         JSONObject valores = (JSONObject) mensaje.get(MensajesJSON.VALUES);
         String cadenaUsuario = (String) valores.get(MensajesJSON.TO);
         valores.remove(MensajesJSON.TO);
         mensaje.put(MensajesJSON.VALUES, valores);
 
-        //servidor.getObjectStore(cadenaUsuario).enviarMsj(mensaje);
     }
 
-    public void recibirMensajeChat() {
-        //servidor.getDB().recuperarMensajes();
-    }
+    public void recibirMensajeChat() throws ParseException, IOException {
 
-    private void verListaCanciones() throws IOException {
-        try {
-            enviarMsj(crearMsjListCanciones(servidor.getDB().obtenerCanciones()));
-        } catch (SQLException ex) {
-            Logger.getLogger(HiloEjecucion.class.getName()).log(Level.SEVERE, null, ex);
+        JSONObject mensaje = new JSONObject();
+        JSONParser parser = new JSONParser();
+        String resp = "Nada";
+        if (listamensajes.size() > 0) {
+            resp = listamensajes.get(0);
+            listamensajes.remove(0);
         }
+        mensaje = (JSONObject) parser.parse(resp);
+        //JSONObject valores = (JSONObject) mensaje.get(MensajesJSON.VALUES);
+        enviarMsj(mensaje);
+
     }
 
-    private void verCancionesUsuario(JSONObject mensaje) throws SQLException, IOException {
+    private JSONObject verCancionesUsuario() throws SQLException, IOException {
 
         JSONObject valores = (JSONObject) mensaje.get(MensajesJSON.VALUES);
         String nombreUsuario = (String) valores.get(MensajesJSON.USER);
 
-        enviarMsj(crearMsjListCancionesUsuario(servidor.getDB().obtenerCancionesUsuario(nombreUsuario)));
-    }
-
-    private JSONObject crearMsjListCanciones(ResultSet rs) throws SQLException {
-        JSONObject respuesta = new JSONObject();
-        JSONObject lista = new JSONObject();
-
-        respuesta.put(MensajesJSON.TYPE, MensajesJSON.type.VER_CANCIONES.toString());
-        lista.put(MensajesJSON.LIST, crearListaCanciones(rs));
-        respuesta.put(MensajesJSON.VALUES, lista);
-
-        return respuesta;
-
+        return (crearMsjListCancionesUsuario(servidor.getDB().obtenerCancionesUsuario(nombreUsuario)));
     }
 
     private JSONObject crearMsjListCancionesUsuario(ResultSet rs) throws SQLException {
@@ -316,6 +334,24 @@ public class HiloEjecucion extends Thread implements Runnable {
 
         respuesta.put(MensajesJSON.TYPE, MensajesJSON.type.VER_CANCIONES_USER.toString());
         lista.put(MensajesJSON.LISTC, crearListaCancionesUsuario(rs));
+        respuesta.put(MensajesJSON.VALUES, lista);
+
+        return respuesta;
+
+    }
+
+    private JSONObject verListaCanciones() throws IOException, SQLException {
+
+        return crearMsjListCanciones(servidor.getDB().obtenerCanciones());
+
+    }
+
+    private JSONObject crearMsjListCanciones(ResultSet rs) throws SQLException {
+        JSONObject respuesta = new JSONObject();
+        JSONObject lista = new JSONObject();
+
+        respuesta.put(MensajesJSON.TYPE, MensajesJSON.type.VER_CANCIONES.toString());
+        lista.put(MensajesJSON.LIST, crearListaCanciones(rs));
         respuesta.put(MensajesJSON.VALUES, lista);
 
         return respuesta;
@@ -342,7 +378,6 @@ public class HiloEjecucion extends Thread implements Runnable {
                 JSONObject cancion = new JSONObject();
                 cancion.put(MensajesJSON.USER, rs.getString("nombreUsuario"));
                 cancion.put(MensajesJSON.NOM_CANCION, rs.getString("nombreCancion"));
-
                 respuesta.add(cancion);
             } while (rs.next());
         }
@@ -405,4 +440,27 @@ public class HiloEjecucion extends Thread implements Runnable {
 
         return respuesta;
     }
+
+    private JSONObject crearMsjPista(String pista) {
+        JSONObject respuesta = new JSONObject();
+
+        //  respuesta.put(MensajesJSON.TYPE, MensajesJSON.type.NUEVO_USUARIO.toString());
+        respuesta.put(MensajesJSON.VALUES, pista);
+
+        return respuesta;
+    }
+
+    public JSONObject salir(JSONObject mensaje) throws SQLException, IOException {
+
+        JSONObject valores = (JSONObject) mensaje.get(MensajesJSON.VALUES);
+        String nombreUsuario = (String) valores.get(MensajesJSON.USER);
+
+        servidor.getDB().desconectarUsuario(nombreUsuario);
+        JSONObject respuesta = new JSONObject();
+        respuesta.put(MensajesJSON.VALUES, "Salir");
+
+        return (respuesta);
+
+    }
+
 }
